@@ -1,11 +1,29 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, MessageCircle, AlertTriangle, HelpCircle, Activity, Users, UserMinus, History, Filter } from 'lucide-react';
 
-export default function SummaryView({ group, summary, currentFilter }: { group: any, summary: any, currentFilter: string }) {
+function DateFormatter({ timestamp }: { timestamp: number }) {
+  const [isClient, setIsClient] = useState(false);
+  
+  useEffect(() => {
+    setIsClient(true);
+  }, []);
+
+  if (!isClient) {
+    return <span className="text-xs text-gray-400">Loading...</span>;
+  }
+
+  return (
+    <span className="text-xs text-gray-400">
+      {new Date(timestamp * 1000).toLocaleString()}
+    </span>
+  );
+}
+
+export default function SummaryView({ group: initialGroup, summary: initialSummary, currentFilter }: { group: any, summary: any, currentFilter: string }) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
@@ -16,6 +34,45 @@ export default function SummaryView({ group, summary, currentFilter }: { group: 
   const [filterType, setFilterType] = useState(currentFilter || 'all');
   const [startDate, setStartDate] = useState(searchParams.get('startDate') || '');
   const [endDate, setEndDate] = useState(searchParams.get('endDate') || '');
+
+  const [group, setGroup] = useState(initialGroup);
+  const [summary, setSummary] = useState(initialSummary);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Real-time data fetching with polling
+  useEffect(() => {
+    const groupId = initialGroup.id; // Use initial ID to avoid dependency issues
+    const fetchData = async () => {
+      setIsLoading(true);
+      try {
+        const params = new URLSearchParams();
+        if (filterType) params.append('filter', filterType);
+        if (startDate) params.append('startDate', startDate);
+        if (endDate) params.append('endDate', endDate);
+        
+        const res = await fetch(`https://wa-monitoring-be.rumahsiapkerja.com/api/summary/${groupId}?${params.toString()}`, { 
+          cache: 'no-store' 
+        });
+        if (res.ok) {
+          const data = await res.json();
+          setGroup(data.group);
+          setSummary(data.summary);
+        }
+      } catch (error) {
+        console.error('Error fetching real-time data:', error);
+      } finally {
+        setIsLoading(false);
+      }
+    };
+
+    // Initial fetch
+    fetchData();
+
+    // Poll every 30 minutes
+    const interval = setInterval(fetchData, 30 * 60 * 1000);
+
+    return () => clearInterval(interval);
+  }, [initialGroup.id, filterType, startDate, endDate]);
 
   const itemsPerPage = 10;
 
@@ -76,7 +133,15 @@ export default function SummaryView({ group, summary, currentFilter }: { group: 
           <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
             <div>
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white tracking-tight">{group.name || group.remoteJid}</h1>
-              <p className="text-gray-500 dark:text-gray-400 mt-1">Chat Summary Report</p>
+              <p className="text-gray-500 dark:text-gray-400 mt-1 flex items-center gap-2">
+                Chat Summary Report
+                {isLoading && (
+                  <span className="flex items-center gap-1 text-xs text-green-600">
+                    <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
+                    Updating...
+                  </span>
+                )}
+              </p>
             </div>
             
             <div className="flex flex-wrap gap-4 items-end">
@@ -126,6 +191,9 @@ export default function SummaryView({ group, summary, currentFilter }: { group: 
                 <div>
                   <p className="text-lg font-bold text-gray-900 dark:text-white leading-none">{summary.totalMessages} <span className="text-xs text-gray-500 font-normal">Msgs</span></p>
                 </div>
+                {isLoading && (
+                  <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse ml-2" title="Updating..."></div>
+                )}
               </div>
             </div>
           </div>
@@ -181,6 +249,7 @@ export default function SummaryView({ group, summary, currentFilter }: { group: 
               <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
                 <Users className="text-blue-500" size={20} /> Active Users ({activeUsers.length})
               </h2>
+              <p className="text-xs text-gray-500 mb-3">Users who sent messages in the selected time period</p>
               <div className="space-y-2 pr-2 min-h-[300px]">
                 {paginatedActive.map((u: any, i: number) => (
                   <div key={i} className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg flex items-center gap-3">
@@ -194,6 +263,9 @@ export default function SummaryView({ group, summary, currentFilter }: { group: 
                     <div className="flex flex-col">
                       <span className="font-semibold text-gray-900 dark:text-white text-sm">
                         {u.name || 'Unknown'} {u.phone ? `(${u.phone})` : ''}
+                      </span>
+                      <span className="text-xs text-gray-500">
+                        {u.messageCount || 0} message{u.messageCount !== 1 ? 's' : ''}
                       </span>
                     </div>
                   </div>
@@ -209,6 +281,7 @@ export default function SummaryView({ group, summary, currentFilter }: { group: 
               <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
                 <UserMinus className="text-gray-400" size={20} /> Inactive Users ({inactiveUsers.length})
               </h2>
+              <p className="text-xs text-gray-500 mb-3">Users who haven't sent messages in the selected time period</p>
               <div className="space-y-2 pr-2 min-h-[300px]">
                 {paginatedInactive.map((u: any, i: number) => (
                   <div key={i} className="p-3 bg-gray-50 dark:bg-gray-800/50 rounded-lg flex items-center gap-3">
@@ -256,9 +329,7 @@ export default function SummaryView({ group, summary, currentFilter }: { group: 
                           {msg.senderName || 'Unknown'} {msg.phone ? `(${msg.phone})` : ''}
                         </span>
                       </div>
-                      <span className="text-xs text-gray-400">
-                        {new Date(msg.timestamp * 1000).toLocaleString()}
-                      </span>
+                      <DateFormatter timestamp={msg.timestamp} />
                     </div>
                     <p className="text-gray-800 dark:text-gray-200 text-sm whitespace-pre-wrap">
                       {msg.text || <span className="italic text-gray-500">({msg.messageType})</span>}

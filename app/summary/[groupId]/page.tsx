@@ -8,7 +8,7 @@ async function getSummary(groupId: string, searchParams: any) {
   if (searchParams?.startDate) params.append('startDate', searchParams.startDate);
   if (searchParams?.endDate) params.append('endDate', searchParams.endDate);
   
-  const res = await fetch(`http://localhost:3005/api/summary/${groupId}?${params.toString()}`, { cache: 'no-store' });
+  const res = await fetch(`https://wa-monitoring-be.rumahsiapkerja.com/api/summary/${groupId}?${params.toString()}`, { cache: 'no-store' });
   if (!res.ok) {
     return null;
   }
