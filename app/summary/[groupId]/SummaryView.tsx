@@ -3,7 +3,7 @@
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { ArrowLeft, MessageCircle, AlertTriangle, HelpCircle, Activity, Users, UserMinus, History, Filter } from 'lucide-react';
+import { ArrowLeft, MessageCircle, AlertTriangle, HelpCircle, Activity, Users, UserMinus, History, Filter, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 
 function DateFormatter({ timestamp }: { timestamp: number }) {
   const [isClient, setIsClient] = useState(false);
@@ -38,6 +38,9 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
   const [group, setGroup] = useState(initialGroup);
   const [summary, setSummary] = useState(initialSummary);
   const [isLoading, setIsLoading] = useState(false);
+  const [showAddAction, setShowAddAction] = useState(false);
+  const [newActionTitle, setNewActionTitle] = useState('');
+  const [newActionDescription, setNewActionDescription] = useState('');
 
   // Real-time data fetching with polling
   useEffect(() => {
@@ -87,6 +90,71 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
   const applyCustomDate = () => {
     if (startDate && endDate) {
       router.push(`?filter=custom&startDate=${startDate}&endDate=${endDate}`);
+    }
+  };
+
+  const handleAddAction = async () => {
+    if (!newActionTitle.trim()) return;
+    
+    try {
+      const res = await fetch(`https://wa-monitoring-be.rumahsiapkerja.com/api/groups/${group.id}/action-items`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: newActionTitle,
+          description: newActionDescription || null
+        })
+      });
+      
+      if (res.ok) {
+        const newAction = await res.json();
+        setSummary({
+          ...summary,
+          actionItems: [newAction, ...(summary.actionItems || [])]
+        });
+        setNewActionTitle('');
+        setNewActionDescription('');
+        setShowAddAction(false);
+      }
+    } catch (error) {
+      console.error('Error creating action item:', error);
+    }
+  };
+
+  const handleUpdateActionStatus = async (id: string, status: string) => {
+    try {
+      const res = await fetch(`https://wa-monitoring-be.rumahsiapkerja.com/api/action-items/${id}/status`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ status })
+      });
+      
+      if (res.ok) {
+        const updatedAction = await res.json();
+        setSummary({
+          ...summary,
+          actionItems: summary.actionItems.map((a: any) => a.id === id ? updatedAction : a)
+        });
+      }
+    } catch (error) {
+      console.error('Error updating action item:', error);
+    }
+  };
+
+  const handleDeleteAction = async (id: string) => {
+    try {
+      const res = await fetch(`https://wa-monitoring-be.rumahsiapkerja.com/api/action-items/${id}`, {
+        method: 'DELETE'
+      });
+      
+      if (res.ok) {
+        setSummary({
+          ...summary,
+          actionItems: summary.actionItems.filter((a: any) => a.id !== id)
+        });
+      }
+    } catch (error) {
+      console.error('Error deleting action item:', error);
     }
   };
 
@@ -195,13 +263,44 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
                   <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse ml-2" title="Updating..."></div>
                 )}
               </div>
+
+              {/* Sentiment Indicator */}
+              <div className={`px-4 py-2 rounded-xl border shadow-sm flex items-center gap-3 h-[42px] ${
+                summary.sentiment?.overall === 'positive' 
+                  ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800/50' 
+                  : summary.sentiment?.overall === 'negative'
+                  ? 'bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800/50'
+                  : summary.sentiment?.overall === 'passive'
+                  ? 'bg-gray-50 dark:bg-gray-800/50 border-gray-200 dark:border-gray-700/50'
+                  : 'bg-blue-50 dark:bg-blue-900/20 border-blue-200 dark:border-blue-800/50'
+              }`}>
+                <div className={
+                  summary.sentiment?.overall === 'positive' 
+                    ? 'text-green-600' 
+                    : summary.sentiment?.overall === 'negative'
+                    ? 'text-red-600'
+                    : summary.sentiment?.overall === 'passive'
+                    ? 'text-gray-600'
+                    : 'text-blue-600'
+                }>
+                  {summary.sentiment?.overall === 'positive' && <TrendingUp size={20} />}
+                  {summary.sentiment?.overall === 'negative' && <TrendingDown size={20} />}
+                  {summary.sentiment?.overall === 'passive' && <Minus size={20} />}
+                  {summary.sentiment?.overall === 'neutral' && <Activity size={20} />}
+                </div>
+                <div>
+                  <p className="text-sm font-bold text-gray-900 dark:text-white leading-none capitalize">
+                    {summary.sentiment?.overall || 'Neutral'} Vibe
+                  </p>
+                </div>
+              </div>
             </div>
           </div>
         </header>
 
-        <main className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <main className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
           {/* Main Topics */}
-          <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col h-full">
+          <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col h-full lg:col-span-1">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-6">
               <Activity className="text-green-500" size={20} /> Topik Utama
             </h2>
@@ -220,8 +319,38 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
             </div>
           </section>
 
+          {/* Sentiment Analysis */}
+          <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col h-full lg:col-span-1">
+            <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-6">
+              {summary.sentiment?.overall === 'positive' && <TrendingUp className="text-green-500" size={20} />}
+              {summary.sentiment?.overall === 'negative' && <TrendingDown className="text-red-500" size={20} />}
+              {summary.sentiment?.overall === 'passive' && <Minus className="text-gray-500" size={20} />}
+              {summary.sentiment?.overall === 'neutral' && <Activity className="text-blue-500" size={20} />}
+              Sentimen Grup
+            </h2>
+            <div className="flex-1 space-y-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Positif</p>
+                  <p className="text-lg font-bold text-green-600">{summary.sentiment?.details?.positiveCount || 0}</p>
+                </div>
+                <div className="p-3 bg-red-50 dark:bg-red-900/20 rounded-lg">
+                  <p className="text-xs text-gray-500 dark:text-gray-400">Negatif</p>
+                  <p className="text-lg font-bold text-red-600">{summary.sentiment?.details?.negativeCount || 0}</p>
+                </div>
+              </div>
+              <div className="text-xs text-gray-500 space-y-1">
+                <p>Emoji Positif: {summary.sentiment?.details?.emojiAnalysis?.positive || 0}</p>
+                <p>Emoji Negatif: {summary.sentiment?.details?.emojiAnalysis?.negative || 0}</p>
+                <p>Kata Positif: {summary.sentiment?.details?.wordAnalysis?.positive || 0}</p>
+                <p>Kata Negatif: {summary.sentiment?.details?.wordAnalysis?.negative || 0}</p>
+                <p>Pattern: {summary.sentiment?.details?.responsePattern || 'unknown'}</p>
+              </div>
+            </div>
+          </section>
+
           {/* Unanswered Questions */}
-          <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col h-full">
+          <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col h-full lg:col-span-1">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-6">
               <HelpCircle className="text-orange-500" size={20} /> Pertanyaan Belum Terjawab
             </h2>
@@ -244,7 +373,7 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
           </section>
 
           {/* User Stats */}
-          <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-8">
+          <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm md:col-span-2 lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-8">
             <div>
               <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-4">
                 <Users className="text-blue-500" size={20} /> Active Users ({activeUsers.length})
@@ -308,7 +437,7 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
           </section>
 
           {/* Chat History */}
-          <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm md:col-span-2">
+          <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm md:col-span-2 lg:col-span-3">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-6">
               <History className="text-purple-500" size={20} /> Riwayat Percakapan
             </h2>
@@ -345,20 +474,80 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
           </section>
 
           {/* Action Items - Moved to bottom */}
-          <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm md:col-span-2">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-6">
-              <AlertTriangle className="text-blue-500" size={20} /> Action Items
-            </h2>
+          <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm md:col-span-2 lg:col-span-3">
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <AlertTriangle className="text-blue-500" size={20} /> Action Items
+              </h2>
+              <button 
+                onClick={() => setShowAddAction(!showAddAction)}
+                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                {showAddAction ? 'Cancel' : '+ Add Action'}
+              </button>
+            </div>
+            
+            {showAddAction && (
+              <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700">
+                <input
+                  type="text"
+                  placeholder="Action title..."
+                  value={newActionTitle}
+                  onChange={(e) => setNewActionTitle(e.target.value)}
+                  className="w-full mb-2 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-sm"
+                />
+                <textarea
+                  placeholder="Description (optional)..."
+                  value={newActionDescription}
+                  onChange={(e) => setNewActionDescription(e.target.value)}
+                  className="w-full mb-2 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-sm resize-none"
+                  rows={2}
+                />
+                <button
+                  onClick={handleAddAction}
+                  className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+                >
+                  Add Action Item
+                </button>
+              </div>
+            )}
+            
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {(summary?.actionItems || []).map((action: string, i: number) => (
-                <div key={i} className="flex gap-3 items-start p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-100 dark:border-gray-700/50">
-                  <input type="checkbox" className="mt-1.5 w-4 h-4 rounded text-blue-600 bg-white border-gray-300 focus:ring-blue-500" disabled />
-                  <p className="text-gray-700 dark:text-gray-300 text-sm leading-relaxed">{action}</p>
+              {(summary?.actionItems || []).map((action: any) => (
+                <div key={action.id} className={`flex gap-3 items-start p-4 rounded-xl border ${
+                  action.status === 'completed' 
+                    ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800/50' 
+                    : 'bg-gray-50 dark:bg-gray-800/50 border-gray-100 dark:border-gray-700/50'
+                }`}>
+                  <input 
+                    type="checkbox" 
+                    checked={action.status === 'completed'}
+                    onChange={(e) => handleUpdateActionStatus(action.id, e.target.checked ? 'completed' : 'pending')}
+                    className="mt-1.5 w-4 h-4 rounded text-blue-600 bg-white border-gray-300 focus:ring-blue-500 cursor-pointer"
+                  />
+                  <div className="flex-1">
+                    <p className={`text-sm leading-relaxed ${
+                      action.status === 'completed' 
+                        ? 'text-gray-500 dark:text-gray-400 line-through' 
+                        : 'text-gray-700 dark:text-gray-300'
+                    }`}>{action.title}</p>
+                    {action.description && (
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">{action.description}</p>
+                    )}
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={() => handleDeleteAction(action.id)}
+                        className="text-xs text-red-500 hover:text-red-700"
+                      >
+                        Delete
+                      </button>
+                    </div>
+                  </div>
                 </div>
               ))}
               {(summary?.actionItems || []).length === 0 && (
                 <div className="col-span-full py-6 text-center text-gray-500 italic">
-                  No action items identified.
+                  No action items yet. Click "+ Add Action" to create one.
                 </div>
               )}
             </div>
