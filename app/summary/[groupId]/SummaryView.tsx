@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, MessageCircle, AlertTriangle, HelpCircle, Activity, Users, UserMinus, History, Filter, TrendingUp, TrendingDown, Minus } from 'lucide-react';
@@ -41,6 +41,21 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
   const [showAddAction, setShowAddAction] = useState(false);
   const [newActionTitle, setNewActionTitle] = useState('');
   const [newActionDescription, setNewActionDescription] = useState('');
+  
+  // Sentiment modal state
+  const [showSentimentModal, setShowSentimentModal] = useState(false);
+  const [sentimentFilter, setSentimentFilter] = useState<'positive' | 'negative' | 'neutral'>('positive');
+  const [sentimentPage, setSentimentPage] = useState(1);
+  
+  // Chat history filter state
+  const [chatSortOrder, setChatSortOrder] = useState<'desc' | 'asc'>('desc');
+  const [selectedSenders, setSelectedSenders] = useState<string[]>([]);
+  const [showSenderFilter, setShowSenderFilter] = useState(false);
+
+  const uniqueSenders: any[] = useMemo(() => {
+    const arr = Array.from(new Set((summary?.allMessages || []).map((m: any) => m.senderId)));
+    return arr;
+  }, [summary?.allMessages]);
 
   // Real-time data fetching with polling
   useEffect(() => {
@@ -93,16 +108,17 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
     }
   };
 
-  const handleAddAction = async () => {
-    if (!newActionTitle.trim()) return;
+  const handleAddAction = async (title?: string, description?: string) => {
+    const actionTitle = title || newActionTitle;
+    if (!actionTitle.trim()) return;
     
     try {
       const res = await fetch(`https://wa-monitoring-be.rumahsiapkerja.com/api/groups/${group.id}/action-items`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          title: newActionTitle,
-          description: newActionDescription || null
+          title: actionTitle,
+          description: description || newActionDescription || null
         })
       });
       
@@ -110,7 +126,11 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
         const newAction = await res.json();
         setSummary({
           ...summary,
-          actionItems: [newAction, ...(summary.actionItems || [])]
+          actionItems: {
+            ...(summary.actionItems || { existing: [], suggested: [] }),
+            existing: [newAction, ...(summary.actionItems?.existing || [])],
+            suggested: (summary.actionItems?.suggested || []).filter((s: string) => s.toLowerCase() !== actionTitle.toLowerCase())
+          }
         });
         setNewActionTitle('');
         setNewActionDescription('');
@@ -133,7 +153,10 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
         const updatedAction = await res.json();
         setSummary({
           ...summary,
-          actionItems: summary.actionItems.map((a: any) => a.id === id ? updatedAction : a)
+          actionItems: {
+            ...(summary.actionItems || { existing: [], suggested: [] }),
+            existing: (summary.actionItems?.existing || []).map((a: any) => a.id === id ? updatedAction : a)
+          }
         });
       }
     } catch (error) {
@@ -150,7 +173,10 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
       if (res.ok) {
         setSummary({
           ...summary,
-          actionItems: summary.actionItems.filter((a: any) => a.id !== id)
+          actionItems: {
+            ...(summary.actionItems || { existing: [], suggested: [] }),
+            existing: (summary.actionItems?.existing || []).filter((a: any) => a.id !== id)
+          }
         });
       }
     } catch (error) {
@@ -302,7 +328,7 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
           {/* Main Topics */}
           <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col h-full lg:col-span-1">
             <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-6">
-              <Activity className="text-green-500" size={20} /> Topik Utama
+              <Activity className="text-green-500" size={20} /> Top 5 Topik Utama
             </h2>
             <div className="flex-1 space-y-4">
               {(summary?.mainTopics || []).map((topic: string, i: number) => (
@@ -321,13 +347,21 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
 
           {/* Sentiment Analysis */}
           <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm flex flex-col h-full lg:col-span-1">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-6">
-              {summary.sentiment?.overall === 'positive' && <TrendingUp className="text-green-500" size={20} />}
-              {summary.sentiment?.overall === 'negative' && <TrendingDown className="text-red-500" size={20} />}
-              {summary.sentiment?.overall === 'passive' && <Minus className="text-gray-500" size={20} />}
-              {summary.sentiment?.overall === 'neutral' && <Activity className="text-blue-500" size={20} />}
-              Sentimen Grup
-            </h2>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                {summary.sentiment?.overall === 'positive' && <TrendingUp className="text-green-500" size={20} />}
+                {summary.sentiment?.overall === 'negative' && <TrendingDown className="text-red-500" size={20} />}
+                {summary.sentiment?.overall === 'passive' && <Minus className="text-gray-500" size={20} />}
+                {summary.sentiment?.overall === 'neutral' && <Activity className="text-blue-500" size={20} />}
+                Sentimen Grup
+              </h2>
+              <button 
+                onClick={() => setShowSentimentModal(true)}
+                className="px-3 py-1.5 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors"
+              >
+                Detail
+              </button>
+            </div>
             <div className="flex-1 space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg">
@@ -438,11 +472,88 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
 
           {/* Chat History */}
           <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm md:col-span-2 lg:col-span-3">
-            <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-6">
-              <History className="text-purple-500" size={20} /> Riwayat Percakapan
-            </h2>
+            <div className="flex justify-between items-center mb-6">
+              <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                <History className="text-purple-500" size={20} /> Riwayat Percakapan
+              </h2>
+              <div className="flex gap-2">
+                <select
+                  value={chatSortOrder}
+                  onChange={(e) => setChatSortOrder(e.target.value as 'desc' | 'asc')}
+                  className="bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-gray-900 dark:text-white text-sm rounded-lg px-3 py-2"
+                >
+                  <option value="desc">Terbaru</option>
+                  <option value="asc">Terlama</option>
+                </select>
+                <button
+                  onClick={() => setShowSenderFilter(!showSenderFilter)}
+                  className="px-3 py-2 bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300 text-sm rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700"
+                >
+                  Filter Pengirim
+                </button>
+              </div>
+            </div>
+            
+            {showSenderFilter && (
+              <div className="mb-4 p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700">
+                <div className="flex flex-wrap gap-2 max-h-40 overflow-y-auto">
+                  {(uniqueSenders as any).map((senderId: string) => {
+                    const sender = (summary.allMessages || []).find((m: any) => m.senderId === senderId);
+                    const name = sender?.senderName || sender?.phone || senderId;
+                    return (
+                      <label key={senderId} className="flex items-center gap-2 bg-white dark:bg-gray-900 px-3 py-2 rounded-lg border border-gray-200 dark:border-gray-700 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={selectedSenders.includes(senderId)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedSenders([...selectedSenders, senderId]);
+                            } else {
+                              setSelectedSenders(selectedSenders.filter(s => s !== senderId));
+                            }
+                          }}
+                          className="rounded text-blue-600"
+                        />
+                        <span className="text-sm text-gray-700 dark:text-gray-300">{name}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="mt-2 flex gap-2">
+                  <button
+                    onClick={() => setSelectedSenders([])}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Clear All
+                  </button>
+                  <button
+                    onClick={() => setSelectedSenders(Array.from(new Set(summary.allMessages.map((m: any) => m.senderId))))}
+                    className="text-xs text-gray-500 hover:text-gray-700"
+                  >
+                    Select All
+                  </button>
+                </div>
+              </div>
+            )}
+            
             <div className="space-y-4 pr-4 min-h-[400px]">
-              {paginatedChat.map((msg: any, i: number) => (
+              {(() => {
+                let filteredMessages = summary.allMessages || [];
+                
+                // Apply sender filter
+                if (selectedSenders.length > 0) {
+                  filteredMessages = filteredMessages.filter((m: any) => selectedSenders.includes(m.senderId));
+                }
+                
+                // Apply sort
+                if (chatSortOrder === 'asc') {
+                  filteredMessages = [...filteredMessages].reverse();
+                }
+                
+                // Apply pagination
+                const paginatedFiltered = filteredMessages.slice((chatPage - 1) * itemsPerPage, chatPage * itemsPerPage);
+                
+                return paginatedFiltered.map((msg: any, i: number) => (
                 <div key={i} className="flex gap-4 p-4 bg-gray-50 dark:bg-gray-800/40 rounded-xl border border-gray-100 dark:border-gray-700/50">
                   {msg.profilePicUrl ? (
                     <img src={msg.profilePicUrl} alt={msg.senderName} className="w-10 h-10 rounded-full object-cover shrink-0 mt-1" />
@@ -465,12 +576,26 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
                     </p>
                   </div>
                 </div>
-              ))}
-              {allMessages.length === 0 && (
-                <p className="text-center py-8 text-gray-500 italic">Belum ada percakapan.</p>
-              )}
+              ));
+              })()}
+              {(() => {
+                let filteredMessages = summary.allMessages || [];
+                if (selectedSenders.length > 0) {
+                  filteredMessages = filteredMessages.filter((m: any) => selectedSenders.includes(m.senderId));
+                }
+                if (filteredMessages.length === 0) {
+                  return <p className="text-center py-8 text-gray-500 italic">Belum ada percakapan.</p>;
+                }
+                return null;
+              })()}
             </div>
-            {renderPagination(chatPage, allMessages.length, setChatPage)}
+            {(() => {
+              let filteredMessages = summary.allMessages || [];
+              if (selectedSenders.length > 0) {
+                filteredMessages = filteredMessages.filter((m: any) => selectedSenders.includes(m.senderId));
+              }
+              return renderPagination(chatPage, filteredMessages.length, setChatPage);
+            })()}
           </section>
 
           {/* Action Items - Moved to bottom */}
@@ -503,17 +628,17 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
                   className="w-full mb-2 px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 rounded-lg text-sm resize-none"
                   rows={2}
                 />
-                <button
-                  onClick={handleAddAction}
-                  className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
-                >
-                  Add Action Item
-                </button>
+                  <button
+                    onClick={() => { handleAddAction(); }}
+                    className="px-4 py-2 bg-green-600 text-white text-sm rounded-lg hover:bg-green-700 transition-colors"
+                  >
+                    Add Action Item
+                  </button>
               </div>
             )}
             
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              {(summary?.actionItems || []).map((action: any) => (
+              {((summary?.actionItems?.existing) || []).map((action: any) => (
                 <div key={action.id} className={`flex gap-3 items-start p-4 rounded-xl border ${
                   action.status === 'completed' 
                     ? 'bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-800/50' 
@@ -545,7 +670,25 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
                   </div>
                 </div>
               ))}
-              {(summary?.actionItems || []).length === 0 && (
+
+              {/* AI suggested action items (strings) */}
+              {((summary?.actionItems?.suggested) || []).map((suggestion: string, i: number) => (
+                <div key={`suggested-${i}`} className={`flex gap-3 items-start p-4 rounded-xl border bg-yellow-50 dark:bg-yellow-900/10 border-yellow-100 dark:border-yellow-800/30`}>
+                  <div className="flex-1">
+                    <p className={`text-sm leading-relaxed text-gray-800 dark:text-gray-200`}>{suggestion}</p>
+                    <div className="flex gap-2 mt-2">
+                      <button
+                        onClick={() => { handleAddAction(suggestion, ''); }}
+                        className="text-xs text-green-600 hover:text-green-800"
+                      >
+                        Create
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {(((summary?.actionItems?.existing) || []).length === 0 && ((summary?.actionItems?.suggested) || []).length === 0) && (
                 <div className="col-span-full py-6 text-center text-gray-500 italic">
                   No action items yet. Click "+ Add Action" to create one.
                 </div>
@@ -554,6 +697,105 @@ export default function SummaryView({ group: initialGroup, summary: initialSumma
           </section>
         </main>
       </div>
+
+      {/* Sentiment Detail Modal */}
+      {showSentimentModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-900 rounded-2xl max-w-4xl w-full max-h-[80vh] overflow-hidden flex flex-col">
+            <div className="p-6 border-b border-gray-200 dark:border-gray-700 flex justify-between items-center">
+              <h3 className="text-xl font-bold text-gray-900 dark:text-white">
+                Detail Sentimen {sentimentFilter === 'positive' ? 'Positif' : sentimentFilter === 'negative' ? 'Negatif' : 'Netral'}
+              </h3>
+              <button 
+                onClick={() => setShowSentimentModal(false)}
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              >
+                ✕
+              </button>
+            </div>
+            
+            <div className="p-4 border-b border-gray-200 dark:border-gray-700 flex gap-2">
+              <button
+                onClick={() => { setSentimentFilter('positive'); setSentimentPage(1); }}
+                className={`px-4 py-2 rounded-lg text-sm ${sentimentFilter === 'positive' ? 'bg-green-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}
+              >
+                Positif ({summary.sentiment?.messages?.positive?.length || 0})
+              </button>
+              <button
+                onClick={() => { setSentimentFilter('negative'); setSentimentPage(1); }}
+                className={`px-4 py-2 rounded-lg text-sm ${sentimentFilter === 'negative' ? 'bg-red-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}
+              >
+                Negatif ({summary.sentiment?.messages?.negative?.length || 0})
+              </button>
+              <button
+                onClick={() => { setSentimentFilter('neutral'); setSentimentPage(1); }}
+                className={`px-4 py-2 rounded-lg text-sm ${sentimentFilter === 'neutral' ? 'bg-gray-600 text-white' : 'bg-gray-100 dark:bg-gray-800 text-gray-700 dark:text-gray-300'}`}
+              >
+                Netral ({summary.sentiment?.messages?.neutral?.length || 0})
+              </button>
+            </div>
+            
+            <div className="flex-1 overflow-y-auto p-6">
+              <div className="space-y-4">
+                {(() => {
+                  const messages = summary.sentiment?.messages?.[sentimentFilter] || [];
+                  const itemsPerPage = 10;
+                  const totalPages = Math.ceil(messages.length / itemsPerPage);
+                  const paginatedMessages = messages.slice((sentimentPage - 1) * itemsPerPage, sentimentPage * itemsPerPage);
+                  
+                  return paginatedMessages.map((msg: any, i: number) => (
+                    <div key={i} className="p-4 bg-gray-50 dark:bg-gray-800/50 rounded-xl border border-gray-200 dark:border-gray-700">
+                      <div className="flex gap-3">
+                        {msg.profilePicUrl ? (
+                          <img src={msg.profilePicUrl} alt={msg.senderName} className="w-10 h-10 rounded-full object-cover" />
+                        ) : (
+                          <div className="w-10 h-10 rounded-full bg-gray-200 dark:bg-gray-700 flex items-center justify-center text-gray-500 font-bold">
+                            {(msg.senderName || msg.phone || '?').charAt(0).toUpperCase()}
+                          </div>
+                        )}
+                        <div className="flex-1">
+                          <div className="flex justify-between items-start mb-1">
+                            <span className="font-semibold text-sm text-gray-900 dark:text-white">
+                              {msg.senderName || 'Unknown'} {msg.phone ? `(${msg.phone})` : ''}
+                            </span>
+                            <DateFormatter timestamp={msg.timestamp} />
+                          </div>
+                          <p className="text-gray-700 dark:text-gray-300 text-sm">{msg.text}</p>
+                          <div className="mt-2 text-xs text-gray-500">
+                            Score: {msg.sentimentScore?.toFixed(2)}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  ));
+                })()}
+              </div>
+            </div>
+            
+            <div className="p-4 border-t border-gray-200 dark:border-gray-700 flex justify-between items-center">
+              <span className="text-sm text-gray-500">
+                Page {sentimentPage} of {Math.ceil((summary.sentiment?.messages?.[sentimentFilter]?.length || 0) / 10)}
+              </span>
+              <div className="flex gap-2">
+                <button
+                  onClick={() => setSentimentPage(Math.max(1, sentimentPage - 1))}
+                  disabled={sentimentPage === 1}
+                  className="px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded text-sm disabled:opacity-50"
+                >
+                  Prev
+                </button>
+                <button
+                  onClick={() => setSentimentPage(Math.min(Math.ceil((summary.sentiment?.messages?.[sentimentFilter]?.length || 0) / 10), sentimentPage + 1))}
+                  disabled={sentimentPage >= Math.ceil((summary.sentiment?.messages?.[sentimentFilter]?.length || 0) / 10)}
+                  className="px-3 py-1 bg-gray-100 dark:bg-gray-800 rounded text-sm disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
