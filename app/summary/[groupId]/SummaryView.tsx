@@ -95,6 +95,7 @@ export default function SummaryView({ groupId }: { groupId: string }) {
             ...prev,
             mainTopics: aiData.mainTopics,
             unansweredQuestions: aiData.unansweredQuestions,
+            sentiment: aiData.sentiment,
             actionItems: {
               existing: prev.actionItems?.existing || [],
               suggested: aiData.suggestedActionItems || []
@@ -363,7 +364,7 @@ export default function SummaryView({ groupId }: { groupId: string }) {
                 Detail
               </button>
             </div>
-            {isLoadingStats ? (
+            {isLoadingAi ? (
               <div className="flex-1 space-y-4 animate-pulse">
                 <div className="grid grid-cols-2 gap-4">
                   <div className="h-16 bg-gray-200 dark:bg-gray-800 rounded-lg"></div>
