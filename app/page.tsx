@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { Users, Activity } from 'lucide-react';
 
 async function getGroups() {
-  const res = await fetch('https://wa-monitoring-be.rumahsiapkerja.com/api/groups', { cache: 'no-store' });
+  const res = await fetch('http://localhost:3005/api/groups', { cache: 'no-store' });
   if (!res.ok) {
     return { groups: [] };
   }

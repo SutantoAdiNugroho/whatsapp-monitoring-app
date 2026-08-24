@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, MessageCircle, AlertTriangle, HelpCircle, Activity, Users, UserMinus, History, Filter, TrendingUp, TrendingDown, Minus, RefreshCw, ThumbsUp, AlertCircle } from 'lucide-react';
 
-const API_BASE = 'https://wa-monitoring-be.rumahsiapkerja.com';
+const API_BASE = 'http://localhost:3005';
 
 function DateFormatter({ timestamp }: { timestamp: number }) {
   const [isClient, setIsClient] = useState(false);
@@ -46,6 +46,15 @@ export default function SummaryView({ groupId }: { groupId: string }) {
   const [chatSortOrder, setChatSortOrder] = useState<'desc' | 'asc'>('asc');
   const [selectedSenders, setSelectedSenders] = useState<string[]>([]);
   const [showSenderFilter, setShowSenderFilter] = useState(false);
+
+  // Foster parent report state
+  const [fosterParentReports, setFosterParentReports] = useState<any[]>([]);
+  const [fosterParentStats, setFosterParentStats] = useState<any>(null);
+  const [fosterParentPage, setFosterParentPage] = useState(1);
+  const [isUpdatingFosterParent, setIsUpdatingFosterParent] = useState(false);
+  const [fosterParentSearch, setFosterParentSearch] = useState('');
+  const [filterActiveInAIIman, setFilterActiveInAIIman] = useState<'all' | 'yes' | 'no'>('all');
+  const [filterActiveInGroup, setFilterActiveInGroup] = useState<'all' | 'yes' | 'no'>('all');
 
   const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
@@ -120,6 +129,39 @@ export default function SummaryView({ groupId }: { groupId: string }) {
       }
     }));
   };
+
+  const fetchFosterParentReports = useCallback(async (page = 1) => {
+    try {
+      const res = await fetch(`${API_BASE}/api/groups/${groupId}/foster-parent-report?page=${page}&limit=10`);
+      if (res.ok) {
+        const data = await res.json();
+        setFosterParentReports(data.reports || []);
+        setFosterParentStats(data.stats || null);
+      }
+    } catch (err) {
+      console.error('Error fetching foster parent reports:', err);
+    }
+  }, [groupId]);
+
+  const handleUpdateFosterParentReport = async () => {
+    setIsUpdatingFosterParent(true);
+    try {
+      const res = await fetch(`${API_BASE}/api/groups/${groupId}/foster-parent-report/update`, {
+        method: 'POST'
+      });
+      if (res.ok) {
+        await fetchFosterParentReports();
+      }
+    } catch (err) {
+      console.error('Error updating foster parent report:', err);
+    } finally {
+      setIsUpdatingFosterParent(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchFosterParentReports(fosterParentPage);
+  }, [fetchFosterParentReports, fosterParentPage]);
 
   const startPolling = () => {
     if (pollIntervalRef.current) return;
@@ -233,7 +275,7 @@ export default function SummaryView({ groupId }: { groupId: string }) {
   };
 
   const isLoadingAi = aiStatus === 'loading' || aiStatus === 'generating';
-  const activeUsers = summary.activeUsers || [];
+  const activeUsers = (summary.activeUsers || []).sort((a: any, b: any) => (b.messageCount || 0) - (a.messageCount || 0));
   const inactiveUsers = summary.inactiveUsers || [];
   const paginatedActive = activeUsers.slice((activePage - 1) * itemsPerPage, activePage * itemsPerPage);
   const paginatedInactive = inactiveUsers.slice((inactivePage - 1) * itemsPerPage, inactivePage * itemsPerPage);
@@ -268,7 +310,7 @@ export default function SummaryView({ groupId }: { groupId: string }) {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-gray-950 p-8 font-sans">
-      <div className="max-w-5xl mx-auto space-y-8">
+      <div className="max-w-7xl mx-auto space-y-8">
         {/* Header */}
         <header>
           <Link href="/" className="inline-flex items-center gap-2 text-sm text-gray-500 hover:text-blue-600 transition-colors mb-6 group">
@@ -491,11 +533,173 @@ export default function SummaryView({ groupId }: { groupId: string }) {
             </div>
           </section>
 
+          {/* Foster Parent Conversation Report */}
+          <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm md:col-span-2 lg:col-span-3">
+            <div className="flex flex-col md:flex-row md:justify-between md:items-center gap-4 mb-4">
+              <div>
+                <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2">
+                  <Users className="text-indigo-500" size={20}/> Foster Parent Conversation Report
+                </h2>
+                <p className="text-xs text-gray-500 mt-1">
+                  Total: {fosterParentStats?.totalFosterParents || 0} | 
+                  Active in AI Iman: {fosterParentStats?.activeInGroup || 0} | 
+                  Inactive in AI Iman: {fosterParentStats?.inactiveInGroup || 0}
+                  {fosterParentStats?.lastUpdated && ` | Updated: ${new Date(fosterParentStats.lastUpdated).toLocaleString('id-ID')}`}
+                </p>
+              </div>
+              <div className="flex flex-wrap gap-3 items-center">
+                <input
+                  type="text"
+                  placeholder="Search by name, email, or whatsapp..."
+                  value={fosterParentSearch}
+                  onChange={(e) => setFosterParentSearch(e.target.value)}
+                  className="flex-1 min-w-[200px] px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-sm rounded-lg"
+                />
+                <select
+                  value={filterActiveInAIIman}
+                  onChange={(e) => setFilterActiveInAIIman(e.target.value as 'all' | 'yes' | 'no')}
+                  className="px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-sm rounded-lg"
+                >
+                  <option value="all">Active in AI Iman: All</option>
+                  <option value="yes">Active in AI Iman: Yes</option>
+                  <option value="no">Active in AI Iman: No</option>
+                </select>
+                <select
+                  value={filterActiveInGroup}
+                  onChange={(e) => setFilterActiveInGroup(e.target.value as 'all' | 'yes' | 'no')}
+                  className="px-3 py-2 bg-white dark:bg-gray-900 border border-gray-300 dark:border-gray-700 text-sm rounded-lg"
+                >
+                  <option value="all">Active in Group: All</option>
+                  <option value="yes">Active in Group: Yes</option>
+                  <option value="no">Active in Group: No</option>
+                </select>
+                <button
+                  onClick={handleUpdateFosterParentReport}
+                  disabled={isUpdatingFosterParent}
+                  className="flex items-center gap-2 px-3 py-2 bg-indigo-600 text-white text-sm rounded-lg hover:bg-indigo-700 disabled:opacity-60 disabled:cursor-not-allowed whitespace-nowrap"
+                >
+                  <RefreshCw size={15} className={isUpdatingFosterParent ? 'animate-spin' : ''} />
+                  Update Manual
+                </button>
+              </div>
+            </div>
+            
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b border-gray-200 dark:border-gray-700">
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Nama</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">WhatsApp</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Email</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Umur</th>
+                    <th className="text-left py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Gender</th>
+                    <th className="text-center py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Active in AI Iman</th>
+                    <th className="text-center py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Messages to AI Iman</th>
+                    <th className="text-center py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Active in Group</th>
+                    <th className="text-center py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Group Messages</th>
+                    <th className="text-center py-3 px-4 font-semibold text-gray-700 dark:text-gray-300">Engagement Score</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {fosterParentReports.length === 0 ? (
+                    <tr>
+                      <td colSpan={10} className="text-center py-8 text-gray-500 italic">Belum ada data foster parent.</td>
+                    </tr>
+                  ) : (
+                    fosterParentReports
+                      .filter((report: any) => {
+                        const searchLower = fosterParentSearch.toLowerCase();
+                        const matchesSearch = (
+                          report.fosterParentName?.toLowerCase().includes(searchLower) ||
+                          report.fosterParentEmail?.toLowerCase().includes(searchLower) ||
+                          report.fosterParentPhone?.includes(searchLower)
+                        );
+                        
+                        const matchesActiveInAIIman = 
+                          filterActiveInAIIman === 'all' ||
+                          (filterActiveInAIIman === 'yes' && report.messageCount > 0) ||
+                          (filterActiveInAIIman === 'no' && report.messageCount === 0);
+                        
+                        const matchesActiveInGroup = 
+                          filterActiveInGroup === 'all' ||
+                          (filterActiveInGroup === 'yes' && report.isActiveInGroup) ||
+                          (filterActiveInGroup === 'no' && !report.isActiveInGroup);
+                        
+                        return matchesSearch && matchesActiveInAIIman && matchesActiveInGroup;
+                      })
+                      .sort((a: any, b: any) => (b.messageCount || 0) - (a.messageCount || 0))
+                      .map((report: any, i: number) => (
+                      <tr key={i} className="border-b border-gray-100 dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-800/50">
+                        <td className="py-3 px-4 font-medium text-gray-900 dark:text-white">{report.fosterParentName}</td>
+                        <td className="py-3 px-4 text-gray-600 dark:text-gray-400">{report.fosterParentPhone}</td>
+                        <td className="py-3 px-4 text-gray-600 dark:text-gray-400">{report.fosterParentEmail || '-'}</td>
+                        <td className="py-3 px-4 text-gray-600 dark:text-gray-400">{report.fosterParentAge || '-'}</td>
+                        <td className="py-3 px-4 text-gray-600 dark:text-gray-400">{report.fosterParentGender || '-'}</td>
+                        <td className="py-3 px-4 text-center">
+                          {report.messageCount > 0 ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-400 rounded-full text-xs font-semibold">
+                              Yes
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-400 rounded-full text-xs font-semibold">
+                              No
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-center text-gray-600 dark:text-gray-400 font-semibold">{report.messageCount || 0}</td>
+                        <td className="py-3 px-4 text-center">
+                          {report.isActiveInGroup ? (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-400 rounded-full text-xs font-semibold">
+                              Yes
+                            </span>
+                          ) : (
+                            <span className="inline-flex items-center gap-1 px-2 py-1 bg-gray-100 dark:bg-gray-800 text-gray-600 dark:text-gray-400 rounded-full text-xs font-semibold">
+                              No
+                            </span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4 text-center text-gray-600 dark:text-gray-400">{report.groupMessageCount || 0}</td>
+                        <td className="py-3 px-4 text-center">
+                          <span className={`font-semibold ${report.engagementScore >= 70 ? 'text-green-600' : report.engagementScore >= 40 ? 'text-yellow-600' : 'text-red-600'}`}>
+                            {report.engagementScore || 0}
+                          </span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
+            
+            {/* Pagination for foster parent reports */}
+            {fosterParentStats && fosterParentStats.totalFosterParents > 10 && (
+              <div className="flex justify-between items-center mt-4">
+                <button 
+                  onClick={() => setFosterParentPage(p => Math.max(1, p - 1))}
+                  disabled={fosterParentPage === 1}
+                  className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-800 rounded disabled:opacity-50"
+                >
+                  Prev
+                </button>
+                <span className="text-sm text-gray-500">
+                  Page {fosterParentPage} of {Math.ceil(fosterParentStats.totalFosterParents / 10)}
+                </span>
+                <button 
+                  onClick={() => setFosterParentPage(p => Math.min(Math.ceil(fosterParentStats.totalFosterParents / 10), p + 1))}
+                  disabled={fosterParentPage >= Math.ceil(fosterParentStats.totalFosterParents / 10)}
+                  className="px-3 py-1 text-sm bg-gray-100 dark:bg-gray-800 rounded disabled:opacity-50"
+                >
+                  Next
+                </button>
+              </div>
+            )}
+          </section>
+
           {/* Active & Inactive Users */}
           <section className="bg-white dark:bg-gray-900 p-6 rounded-2xl border border-gray-100 dark:border-gray-800 shadow-sm md:col-span-2 lg:col-span-3 grid grid-cols-1 md:grid-cols-2 gap-8">
             <div>
               <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-2">
-                <Users className="text-blue-500" size={20}/> Active Users ({activeUsers.length})
+                <Users className="text-blue-500" size={20}/> Active Users in Group ({activeUsers.length})
               </h2>
               <p className="text-xs text-gray-500 mb-3">User yang aktif mengirim pesan</p>
               <div className="space-y-2 min-h-[280px]">
@@ -532,7 +736,7 @@ export default function SummaryView({ groupId }: { groupId: string }) {
 
             <div>
               <h2 className="text-lg font-bold text-gray-900 dark:text-white flex items-center gap-2 mb-2">
-                <UserMinus className="text-gray-400" size={20}/> Inactive Users ({inactiveUsers.length})
+                <UserMinus className="text-gray-400" size={20}/> Inactive Users in Group ({inactiveUsers.length})
               </h2>
               <p className="text-xs text-gray-500 mb-3">User yang tidak mengirim pesan</p>
               <div className="space-y-2 min-h-[280px]">
