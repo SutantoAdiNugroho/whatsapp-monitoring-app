@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, MessageCircle, AlertTriangle, HelpCircle, Activity, Users, UserMinus, History, Filter, TrendingUp, TrendingDown, Minus, RefreshCw, ThumbsUp, AlertCircle } from 'lucide-react';
 
-const API_BASE = 'http://localhost:3005';
+const API_BASE = 'https://wa-monitoring-be.rumahsiapkerja.com';
 
 function DateFormatter({ timestamp }: { timestamp: number }) {
   const [isClient, setIsClient] = useState(false);
