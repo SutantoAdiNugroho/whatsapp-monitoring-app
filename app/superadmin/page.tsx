@@ -365,7 +365,9 @@ export default function SuperadminPage() {
                 <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4">
                   <h3 className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-2">Available Placeholders:</h3>
                   <ul className="text-sm text-blue-700 dark:text-blue-300 space-y-1">
-                    <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{"{activeUsers}"}</code> - Number of active users in group</li>
+                    <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{"{activeUsers}"}</code> - Total active users in group</li>
+                    <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{"{activeInternalUsers}"}</code> - Active internal team users</li>
+                    <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{"{activeFosterParents}"}</code> - Active foster parents</li>
                     <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{"{totalMessages}"}</code> - Total messages sent</li>
                     <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{"{aiImanMessages}"}</code> - Messages to AI Iman</li>
                     <li><code className="bg-blue-100 dark:bg-blue-800 px-1 rounded">{"{likes}"}</code> - Total likes on AI Iman responses</li>
